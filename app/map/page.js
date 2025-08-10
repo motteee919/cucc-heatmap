@@ -1,0 +1,6 @@
+'use client';import {useEffect,useRef} from 'react';import maplibregl from 'maplibre-gl';import 'maplibre-gl/dist/maplibre-gl.css';
+export default function Map(){const ref=useRef(), mapRef=useRef();useEffect(()=>{if(mapRef.current)return;
+const m=new maplibregl.Map({container:ref.current,style:{version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OSM'}},layers:[{id:'osm',type:'raster',source:'osm'}]},center:[139.767,35.681],zoom:5});mapRef.current=m;
+m.on('load',async()=>{const heat=await fetch('/api/heat?h=7').then(r=>r.json());m.addSource('heat',{type:'geojson',data:heat});m.addLayer({id:'heat',type:'heatmap',source:'heat',paint:{'heatmap-radius':20,'heatmap-opacity':0.7}});
+m.addSource('lines',{type:'geojson',data:{type:'FeatureCollection',features:[]}});m.addLayer({id:'lines',type:'line',source:'lines',paint:{'line-width':2}});fetchLines(m);});m.on('moveend',()=>fetchLines(m));},[]);
+async function fetchLines(m){const b=m.getBounds();const z=Math.round(m.getZoom());const d=await fetch(`/api/lines?bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}&z=${z}`).then(r=>r.json());m.getSource('lines').setData(d);}return <div ref={ref} style={{position:'absolute',inset:0}}/>}
