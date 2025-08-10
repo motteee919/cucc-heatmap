@@ -70,13 +70,13 @@ export async function POST(req) {
       const f = toFeature(coords);
       const low = simp(f, TOLS.low), mid = simp(f, TOLS.mid), hi = simp(f, TOLS.hi);
       const [w,s,e,n] = bbox(low);
-      const id = `${user.id}-${stamp}-${saved+1}`;
+      const trackId = `${user.id}-${stamp}-${saved+1}`;
 
-      await supa.storage.from('tracks').upload(`${id}-low.json`, new Blob([JSON.stringify(low)], { type:'application/json' }), { upsert:true });
-      await supa.storage.from('tracks').upload(`${id}-mid.json`, new Blob([JSON.stringify(mid)], { type:'application/json' }), { upsert:true });
-      await supa.storage.from('tracks').upload(`${id}-hi.json`,  new Blob([JSON.stringify(hi)],  { type:'application/json' }), { upsert:true });
+      await supa.storage.from('tracks').upload(`${trackId}-low.json`, new Blob([JSON.stringify(low)], { type:'application/json' }), { upsert:true });
+      await supa.storage.from('tracks').upload(`${trackId}-mid.json`, new Blob([JSON.stringify(mid)], { type:'application/json' }), { upsert:true });
+      await supa.storage.from('tracks').upload(`${trackId}-hi.json`,  new Blob([JSON.stringify(hi)],  { type:'application/json' }), { upsert:true });
 
-      await supa.from('track_meta').insert({ id, w, e, s, n }); // 既存テーブルにid列が無ければbigserialとは別にtext型id列を追加推奨
+      await supa.from('track_meta').insert({ trackId, w, e, s, n }); // 既存テーブルにid列が無ければbigserialとは別にtext型id列を追加推奨
 
       for (const c of lineToH3(low,7)) heat.set(c, (heat.get(c)||0)+1);
       saved++;
