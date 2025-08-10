@@ -1,0 +1,1 @@
+import {NextResponse} from 'next/server';import {supaAdmin} from '../../../lib/supa.js';export const runtime='nodejs';export async function GET(){const s=supaAdmin();const {data}=await s.storage.from('indexes').download('heat-res7.json');if(!data)return NextResponse.json({type:'FeatureCollection',features:[]});const t=await data.text();return NextResponse.json(JSON.parse(t));}
