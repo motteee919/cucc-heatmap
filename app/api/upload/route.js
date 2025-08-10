@@ -1,55 +1,19 @@
-import { NextResponse } from 'next/server';
-import AdmZip from 'adm-zip';
-import { supaAdmin, parseGPX, parseTCX, coordsToFeature, flushBatch } from '@/lib/utils';
-
-export async function POST(req) {
-  try {
-    const fd = await req.formData();
-    const file = fd.get('zip');
-    if (!file) return NextResponse.text('ファイルがありません', { status: 400 });
-
-    const buf = Buffer.from(await file.arrayBuffer());
-    const name = (file.name || '').toLowerCase();
-    const supa = supaAdmin();
-    const heat = new Map();
-    let parsed = 0, stored = 0, id = 0;
-    const batch = [];
-
-    if (name.endsWith('.zip')) {
-      // ZIPを展開してGPX/TCXだけ処理
-      const zip = new AdmZip(buf);
-      const entries = zip.getEntries();
-      for (const e of entries) {
-        if (!e.name.toLowerCase().endsWith('.gpx') && !e.name.toLowerCase().endsWith('.tcx')) continue;
-        const xml = e.getData().toString('utf-8');
-        const tracks = e.name.toLowerCase().endsWith('.gpx') ? parseGPX(xml) : parseTCX(xml);
-        for (const coords of tracks) {
-          if (coords.length < 2) continue;
-          batch.push(coordsToFeature(coords));
-          parsed++;
-          if (batch.length >= 50) { const r = await flushBatch(batch, supa, heat, id); id += r.stored; stored += r.stored; }
-        }
-      }
-    } else {
-      // GPX/TCX単体
-      const xml = buf.toString('utf-8');
-      const tracks = name.endsWith('.tcx') ? parseTCX(xml) : parseGPX(xml);
-      for (const coords of tracks) {
-        if (coords.length < 2) continue;
-        batch.push(coordsToFeature(coords));
-        parsed++;
-        if (batch.length >= 50) { const r = await flushBatch(batch, supa, heat, id); id += r.stored; stored += r.stored; }
-      }
-    }
-
-    if (batch.length > 0) {
-      const r = await flushBatch(batch, supa, heat, id);
-      stored += r.stored;
-    }
-
-    return NextResponse.text(`解析${parsed}件 → 保存${stored}件`);
-  } catch (err) {
-    console.error(err);
-    return NextResponse.text(`エラー: ${err.message}`, { status: 500 });
-  }
-}
+import { NextResponse } from 'next/server';import AdmZip from 'adm-zip';
+import { supaAdmin } from '../../../lib/supa.js';import { parseGPX,parseTCX } from '../../../lib/parse_gpx_tcx.js';
+import { coordsToFeature as F,simp,bbox,cells,heatFC,TOLS } from '../../../lib/geo.js';
+export const runtime='nodejs';
+export async function POST(req){try{const fd=await req.formData();const file=fd.get('zip');if(!file)return NextResponse.text('zipなし',{status:400});
+const buf=Buffer.from(await file.arrayBuffer());const zip=new AdmZip(buf);const ents=zip.getEntries();const supa=supaAdmin();
+let parsed=0,skipped=0;const heat=new Map();let nextId=0;
+const batch=[];for(const e of ents){if(e.isDirectory)continue;const ext=e.entryName.slice(e.entryName.lastIndexOf('.')).toLowerCase();
+if(ext!=='.gpx'&&ext!=='.tcx'){skipped++;continue}const xml=e.getData().toString('utf-8');const arr=(ext==='.gpx')?parseGPX(xml):parseTCX(xml);
+for(const coords of arr){if(coords.length<2)continue;batch.push(F(coords));parsed++;if(batch.length>=50){nextId+=await flush(batch,supa,heat,nextId);}}}
+if(batch.length){nextId+=await flush(batch,supa,heat,nextId);}const heatJson=heatFC(heat);
+await supa.storage.from('indexes').upload('heat-res7.json',new Blob([JSON.stringify(heatJson)],{type:'application/json'}),{upsert:true});
+return NextResponse.text(`OK parsed=${parsed} skip=${skipped} saved=${nextId}`);}catch(e){return NextResponse.text('err:'+e.message,{status:500});}}
+async function flush(batch,supa,heat,start){let saved=0;while(batch.length){const f=batch.shift();const low=simp(f,TOLS.low),mid=simp(f,TOLS.mid),hi=simp(f,TOLS.hi);
+const bb=bbox(low);const w=bb[0],s=bb[1],e=bb[2],n=bb[3];const id=start+saved+1;
+await supa.storage.from('tracks').upload(`${id}-low.json`,new Blob([JSON.stringify(low)],{type:'application/json'}),{upsert:true});
+await supa.storage.from('tracks').upload(`${id}-mid.json`,new Blob([JSON.stringify(mid)],{type:'application/json'}),{upsert:true});
+await supa.storage.from('tracks').upload(`${id}-hi.json`, new Blob([JSON.stringify(hi)], {type:'application/json'}),{upsert:true});
+await supa.from('track_meta').insert({w,e,s,n});for(const c of cells(low,7))heat.set(c,(heat.get(c)||0)+1);saved++;}return saved;}
