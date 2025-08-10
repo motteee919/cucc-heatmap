@@ -1,1 +1,9 @@
-export const metadata={title:'Club Heatmap — Supabase'};export default function R({children}){return <html lang='ja'><body style={{margin:0,fontFamily:'system-ui'}}>{children}</body></html>}
+export const metadata = { title: 'CUCCせんつなぎ（仮）' };
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="ja">
+      <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif' }}>{children}</body>
+    </html>
+  );
+}
